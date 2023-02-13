@@ -55,6 +55,7 @@ class Predictor(cog.Predictor):
     )
     def predict(self, image, task='Face Restoration', output_individual=False, broken_image=True):
         out_path = Path(tempfile.mkdtemp()) / "out.png"
+        
         if task == 'Face Restoration':
             im = cv2.imread(str(image), cv2.IMREAD_COLOR)  # BGR
             assert isinstance(im, np.ndarray), 'input filename error'

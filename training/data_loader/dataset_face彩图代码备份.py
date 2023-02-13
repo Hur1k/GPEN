@@ -20,7 +20,7 @@ class GFPGAN_degradation(object):
         self.downsample_range = [0.8, 8]
         self.noise_range = [0, 20]
         self.jpeg_range = [60, 100]
-        self.gray_prob = 1 #单通道用
+        self.gray_prob = 0.2
         self.color_jitter_prob = 0.0
         self.color_jitter_pt_prob = 0.0
         self.shift = 20/255.
@@ -31,7 +31,7 @@ class GFPGAN_degradation(object):
 
         h, w = img_gt.shape[:2]
        
-        # random color jitter 改变图像属性，这里上面设置了0暂时关闭了
+        # random color jitter 
         if np.random.uniform() < self.color_jitter_prob:
             jitter_val = np.random.uniform(-self.shift, self.shift, 3).astype(np.float32)
             img_gt = img_gt + jitter_val
@@ -62,8 +62,6 @@ class GFPGAN_degradation(object):
         # jpeg compression
         if self.jpeg_range is not None:
             img_lq = degradations.random_add_jpg_compression(img_lq, self.jpeg_range)
-            # Image.fromarray(img_lq[:][:][0]).convert('RGB').save("test.png")
-            
 
         # round and clip
         img_lq = np.clip((img_lq * 255.0).round(), 0, 255) / 255.
@@ -86,8 +84,7 @@ class FaceDataset(Dataset):
         return self.length
 
     def __getitem__(self, index):
-        img_gt = cv2.imread(self.HQ_imgs[index], cv2.IMREAD_COLOR) #.IMREAD_COLOR 彩图
-        img_gt = img_gt[35:70,35+108:70+108] #裁剪celeba数据集
+        img_gt = cv2.imread(self.HQ_imgs[index], cv2.IMREAD_COLOR)
         img_gt = cv2.resize(img_gt, (self.resolution, self.resolution), interpolation=cv2.INTER_AREA)
         
         # BFR degradation
@@ -97,15 +94,10 @@ class FaceDataset(Dataset):
             #数据退化在BFR中起着关键作用。请用你自己的方法替换。
         img_gt = img_gt.astype(np.float32)/255.
         img_gt, img_lq = self.degrader.degrade_process(img_gt)
-        
-        # 转单通道
-        img_gt = cv2.cvtColor(img_gt, cv2.COLOR_BGR2GRAY)
-        img_lq = cv2.cvtColor(img_lq, cv2.COLOR_BGR2GRAY)
 
-        img_gt =  ((torch.from_numpy(img_gt) - 0.5) / 0.5).view(self.resolution,self.resolution,1)
-        img_lq =  ((torch.from_numpy(img_lq) - 0.5) / 0.5).view(self.resolution,self.resolution,1)
+        img_gt =  (torch.from_numpy(img_gt) - 0.5) / 0.5
+        img_lq =  (torch.from_numpy(img_lq) - 0.5) / 0.5
         
-        # 轴转换
         img_gt = img_gt.permute(2, 0, 1).flip(0) # BGR->RGB
         img_lq = img_lq.permute(2, 0, 1).flip(0) # BGR->RGB
 

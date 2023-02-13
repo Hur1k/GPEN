@@ -127,3 +127,8 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Hur1k's gitignore
+*.jpg
+*.png
+*.pth

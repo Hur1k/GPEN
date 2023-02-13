@@ -5,6 +5,24 @@ This is a simplified training code of GPEN. It achieves comparable performance a
 
 @Modified by yangxy (yangtao9009@gmail.com)
 '''
+
+'''
+@Hur1k's comments:
+分布式训练： CUDA_VISIBLE_DEVICES='0,1,' python -m torch.distributed.launch --nproc_per_node=2 --master_port=4321 train_simple.py --size 512 --channel_multiplier 2 --narrow 1 --ckpt ckpt-512 --sample sample-512 --batch 1 --path your_path_of_aligned_faces
+简单训练： python train_simple.py 
+    --size 512 
+    --channel_multiplier 2 
+    --narrow 1 
+    --ckpt ckpt-512 
+    --sample sample-512 
+    --batch 1 
+    --path your_path_of_aligned_faces
+
+参数设置注意，如果用256的话要同时/2
+--size 512 
+--channel_multiplier 2 
+--narrow 1
+'''
 import argparse
 import math
 import random
@@ -66,7 +84,7 @@ def sample_data(loader):
             yield batch
 
 
-def d_logistic_loss(real_pred, fake_pred):
+def d_logistic_loss(real_pred, fake_pred): #逻辑回归损失
     real_loss = F.softplus(-real_pred)
     fake_loss = F.softplus(fake_pred)
 
@@ -173,6 +191,7 @@ def train(args, loader, generator, discriminator, losses, g_optim, d_optim, g_em
         degraded_img = degraded_img.to(device)
         real_img = real_img.to(device)
 
+        # 先训练 D
         requires_grad(generator, False)
         requires_grad(discriminator, True)
 
@@ -190,7 +209,7 @@ def train(args, loader, generator, discriminator, losses, g_optim, d_optim, g_em
         d_loss.backward()
         d_optim.step()
 
-        d_regularize = i % args.d_reg_every == 0
+        d_regularize = i % args.d_reg_every == 0 #正则化
 
         if d_regularize:
             real_img.requires_grad = True
@@ -203,6 +222,8 @@ def train(args, loader, generator, discriminator, losses, g_optim, d_optim, g_em
             d_optim.step()
 
         loss_dict['r1'] = r1_loss
+        
+        # 训练 G
 
         requires_grad(generator, True)
         requires_grad(discriminator, False)
@@ -245,7 +266,7 @@ def train(args, loader, generator, discriminator, losses, g_optim, d_optim, g_em
         loss_dict['path'] = path_loss
         loss_dict['path_length'] = path_lengths.mean()
 
-        accumulate(g_ema, g_module, accum)
+        accumulate(g_ema, g_module, accum) # REVIEW 作用是？
 
         loss_reduced = reduce_loss_dict(loss_dict)
 
@@ -264,7 +285,7 @@ def train(args, loader, generator, discriminator, losses, g_optim, d_optim, g_em
                 )
             )
             
-            if i % args.save_freq == 0:
+            if i % args.save_freq == 0: #save_freq是输出照片的频率
                 with torch.no_grad():
                     g_ema.eval()
                     sample, _ = g_ema(degraded_img)
@@ -280,7 +301,7 @@ def train(args, loader, generator, discriminator, losses, g_optim, d_optim, g_em
                 lpips_value = validation(g_ema, lpips_func, args, device)
                 print(f'{i}/{args.iter}: lpips: {lpips_value.cpu().numpy()[0][0][0][0]}')
 
-            if i and i % args.save_freq == 0:
+            if i and i % (args.save_freq*10) == 0: #保存模型参数
                 torch.save(
                     {
                         'g': g_module.state_dict(),
@@ -307,22 +328,24 @@ if __name__ == '__main__':
     parser.add_argument('--r1', type=float, default=10)
     parser.add_argument('--path_regularize', type=float, default=2)
     parser.add_argument('--path_batch_shrink', type=int, default=2)
-    parser.add_argument('--d_reg_every', type=int, default=16)
-    parser.add_argument('--g_reg_every', type=int, default=4)
+    parser.add_argument('--d_reg_every', type=int, default=16) #正则化频次
+    parser.add_argument('--g_reg_every', type=int, default=4)   #正则化频次
     parser.add_argument('--save_freq', type=int, default=10000)
     parser.add_argument('--lr', type=float, default=0.002)
     parser.add_argument('--local_rank', type=int, default=0)
-    parser.add_argument('--ckpt', type=str, default='ckpts')
+    parser.add_argument('--ckpt', type=str, default='ckpts') #模型参数保存在这，会创建文件夹，pretrain的参数也要放这里
     parser.add_argument('--pretrain', type=str, default=None)
-    parser.add_argument('--sample', type=str, default='sample')
-    parser.add_argument('--val_dir', type=str, default='val')
+    parser.add_argument('--sample', type=str, default='sample') #训练阶段用于输出样例以观察，这里需要输入一个路径，将会创建对应的文件夹
+    parser.add_argument('--val_dir', type=str, default='val') #测试阶段用，获取hq和lq的照片，需要输入文件夹路径
+    parser.add_argument('--use_cuda', action='store_true', help='use cuda or not')
+    
 
     args = parser.parse_args()
 
     os.makedirs(args.ckpt, exist_ok=True)
     os.makedirs(args.sample, exist_ok=True)
 
-    device = 'cuda'
+    device = 'cuda' if args.use_cuda else 'cpu'
 
     n_gpu = int(os.environ['WORLD_SIZE']) if 'WORLD_SIZE' in os.environ else 1
     args.distributed = n_gpu > 1
@@ -367,7 +390,7 @@ if __name__ == '__main__':
     if args.pretrain is not None:
         print('load model:', args.pretrain)
         
-        ckpt = torch.load(args.pretrain)
+        ckpt = torch.load(args.pretrain,map_location=device)
 
         generator.load_state_dict(ckpt['g'])
         discriminator.load_state_dict(ckpt['d'])
@@ -376,9 +399,9 @@ if __name__ == '__main__':
         g_optim.load_state_dict(ckpt['g_optim'])
         d_optim.load_state_dict(ckpt['d_optim'])
     
-    smooth_l1_loss = torch.nn.SmoothL1Loss().to(device)
-    id_loss = IDLoss(args.base_dir, device, ckpt_dict=None)
-    lpips_func = lpips.LPIPS(net='alex',version='0.1').to(device)
+    smooth_l1_loss = torch.nn.SmoothL1Loss().to(device) #平滑的L1损失
+    id_loss = IDLoss(args.base_dir, device, ckpt_dict=None) # 实现一个人脸识别的训练损失函数-bygpt
+    lpips_func = lpips.LPIPS(net='alex',version='0.1').to(device) #图像相似度评估方法
     
     if args.distributed:
         generator = nn.parallel.DistributedDataParallel(
@@ -402,7 +425,7 @@ if __name__ == '__main__':
             broadcast_buffers=False,
         )
 
-    dataset = FaceDataset(args.path, args.size)
+    dataset = FaceDataset(args.path, args.size) #生成数据集，模糊的和清晰的
     loader = data.DataLoader(
         dataset,
         batch_size=args.batch,

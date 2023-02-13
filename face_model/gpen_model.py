@@ -121,7 +121,7 @@ class EqualConv2d(nn.Module):
     def forward(self, input):
         out = F.conv2d(
             input,
-            self.weight * self.scale,
+            filters = self.weight * self.scale,
             bias=self.bias,
             stride=self.stride,
             padding=self.padding,

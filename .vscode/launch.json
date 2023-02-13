@@ -1,0 +1,46 @@
+{
+    "configurations": [
+        {
+            "name": "Train-args",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "--size","256",  //默认是256,最少是256
+                "--channel_multiplier","1",
+                "--narrow","0.5",
+                "--ckpt","_myckpt",
+                "--sample","_mysample",
+                "--batch","1",  //默认是4
+                "--path","_mydataset",
+                "--save_freq","10",
+                // "--pretrain","./weights/GPEN-BFR-256.pth",
+                "--iter","201"
+
+
+            ]
+        },
+        {
+            "name": "demo",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "--task","FaceEnhancement",
+                "--model","GPEN-BFR-256",
+                "--in_size","256",
+                "--channel_multiplier","1",
+                "--narrow","0.5",
+                "--use_sr",
+                "--sr_scale","4",
+                "--save_face",
+                "--indir","examples/imgs",
+                "--outdir","examples/myoutput"
+            ]
+        }
+    ]
+}
