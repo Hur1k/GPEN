@@ -266,7 +266,7 @@ def train(args, loader, generator, discriminator, losses, g_optim, d_optim, g_em
         loss_dict['path'] = path_loss
         loss_dict['path_length'] = path_lengths.mean()
 
-        accumulate(g_ema, g_module, accum) # REVIEW 作用是？
+        accumulate(g_ema, g_module, accum) # REVIEW 作用是保持gan稳定,g_ema被微调
 
         loss_reduced = reduce_loss_dict(loss_dict)
 
@@ -293,6 +293,13 @@ def train(args, loader, generator, discriminator, losses, g_optim, d_optim, g_em
                     utils.save_image(
                         sample,
                         f'{args.sample}/{str(i).zfill(6)}.png',
+                        nrow=args.batch,
+                        normalize=True,
+                        range=(-1, 1),
+                    )
+                    utils.save_image(
+                        degraded_img,
+                        f'tmp.png',
                         nrow=args.batch,
                         normalize=True,
                         range=(-1, 1),
@@ -364,7 +371,7 @@ if __name__ == '__main__':
         args.size, args.latent, args.n_mlp, channel_multiplier=args.channel_multiplier, narrow=args.narrow, device=device
     ).to(device)
     discriminator = Discriminator(
-        args.size, channel_multiplier=args.channel_multiplier, narrow=args.narrow, device=device
+        args.size, channel_multiplier=args.channel_multiplier, narrow=args.narrow*2, device=device
     ).to(device)
     g_ema = FullGenerator(
         args.size, args.latent, args.n_mlp, channel_multiplier=args.channel_multiplier, narrow=args.narrow, device=device
@@ -386,8 +393,14 @@ if __name__ == '__main__':
         lr=args.lr * d_reg_ratio,
         betas=(0 ** d_reg_ratio, 0.99 ** d_reg_ratio),
     )
+    
+    g_weight = torch.load('./_myweight/GPEN-BFR-256-G.pth',map_location=device)
+    d_weight = torch.load('./_myweight/GPEN-BFR-256-D.pth',map_location=device)
+    generator.load_state_dict(g_weight)
+    g_ema.load_state_dict(g_weight)
+    discriminator.load_state_dict(d_weight)
 
-    if args.pretrain is not None:
+    if args.pretrain is  None:
         print('load model:', args.pretrain)
         
         ckpt = torch.load(args.pretrain,map_location=device)

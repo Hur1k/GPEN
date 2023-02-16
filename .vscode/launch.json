@@ -16,7 +16,7 @@
                 "--batch","1",  //默认是4
                 "--path","_mydataset",
                 "--save_freq","10",
-                // "--pretrain","./weights/GPEN-BFR-256.pth",
+                "--pretrain","./weights/GPEN-BFR-256.pth",
                 "--iter","201"
 
 

@@ -20,7 +20,7 @@ class GFPGAN_degradation(object):
         self.downsample_range = [0.8, 8]
         self.noise_range = [0, 20]
         self.jpeg_range = [60, 100]
-        self.gray_prob = 1 #单通道用
+        self.gray_prob = 0.2
         self.color_jitter_prob = 0.0
         self.color_jitter_pt_prob = 0.0
         self.shift = 20/255.
@@ -87,7 +87,7 @@ class FaceDataset(Dataset):
 
     def __getitem__(self, index):
         img_gt = cv2.imread(self.HQ_imgs[index], cv2.IMREAD_COLOR) #.IMREAD_COLOR 彩图
-        img_gt = img_gt[35:70,35+108:70+108] #裁剪celeba数据集
+        img_gt = img_gt[70:70+108,35:35+108] #裁剪celeba数据集
         img_gt = cv2.resize(img_gt, (self.resolution, self.resolution), interpolation=cv2.INTER_AREA)
         
         # BFR degradation
@@ -98,12 +98,12 @@ class FaceDataset(Dataset):
         img_gt = img_gt.astype(np.float32)/255.
         img_gt, img_lq = self.degrader.degrade_process(img_gt)
         
-        # 转单通道
-        img_gt = cv2.cvtColor(img_gt, cv2.COLOR_BGR2GRAY)
-        img_lq = cv2.cvtColor(img_lq, cv2.COLOR_BGR2GRAY)
+        # # 转单通道
+        # img_gt = cv2.cvtColor(img_gt, cv2.COLOR_BGR2GRAY)
+        # img_lq = cv2.cvtColor(img_lq, cv2.COLOR_BGR2GRAY)
 
-        img_gt =  ((torch.from_numpy(img_gt) - 0.5) / 0.5).view(self.resolution,self.resolution,1)
-        img_lq =  ((torch.from_numpy(img_lq) - 0.5) / 0.5).view(self.resolution,self.resolution,1)
+        img_gt =  ((torch.from_numpy(img_gt) - 0.5) / 0.5)#.view(self.resolution,self.resolution,1)
+        img_lq =  ((torch.from_numpy(img_lq) - 0.5) / 0.5)#.view(self.resolution,self.resolution,1)
         
         # 轴转换
         img_gt = img_gt.permute(2, 0, 1).flip(0) # BGR->RGB

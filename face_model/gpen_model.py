@@ -121,7 +121,7 @@ class EqualConv2d(nn.Module):
     def forward(self, input):
         out = F.conv2d(
             input,
-            filters = self.weight * self.scale,
+            self.weight * self.scale,
             bias=self.bias,
             stride=self.stride,
             padding=self.padding,
@@ -655,7 +655,7 @@ class FullGenerator(nn.Module):
         self.log_size = int(math.log(size, 2))
         self.generator = Generator(size, style_dim, n_mlp, channel_multiplier=channel_multiplier, blur_kernel=blur_kernel, lr_mlp=lr_mlp, isconcat=isconcat, narrow=narrow, device=device)
         
-        conv = [ConvLayer(3, channels[size], 1, device=device)]
+        conv = [ConvLayer(3, channels[size], 1, device=device)] # NOTE 第一个参数是in_channel
         self.ecd0 = nn.Sequential(*conv)
         in_channel = channels[size]
 
@@ -684,7 +684,7 @@ class FullGenerator(nn.Module):
             #print(inputs.shape)
         inputs = inputs.view(inputs.shape[0], -1)
         outs = self.final_linear(inputs)
-        #print(outs.shape)
+        # print(outs.shape)
         noise = list(itertools.chain.from_iterable(itertools.repeat(x, 2) for x in noise))[::-1]
         outs = self.generator([outs], return_latents, inject_index, truncation, truncation_latent, input_is_latent, noise=noise[1:])
         return outs
