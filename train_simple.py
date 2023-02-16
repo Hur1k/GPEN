@@ -7,6 +7,7 @@ This is a simplified training code of GPEN. It achieves comparable performance a
 '''
 
 '''
+TASK3-test
 @Hur1k's comments:
 分布式训练： CUDA_VISIBLE_DEVICES='0,1,' python -m torch.distributed.launch --nproc_per_node=2 --master_port=4321 train_simple.py --size 512 --channel_multiplier 2 --narrow 1 --ckpt ckpt-512 --sample sample-512 --batch 1 --path your_path_of_aligned_faces
 简单训练： python train_simple.py 
