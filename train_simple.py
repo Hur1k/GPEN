@@ -307,7 +307,7 @@ def train(args, loader, generator, discriminator, losses, g_optim, d_optim, g_em
                     #     range=(-1, 1),
                     # )
                     
-
+ 
                 lpips_value = validation(g_ema, lpips_func, args, device) # REVIEW 暂时未处理，lpips不可信
                 # lpips_value = validation(g_ema, lpips_func, args, device)
                 print(f'{i}/{args.iter}: lpips: {lpips_value.cpu().numpy()[0][0][0][0]}')
