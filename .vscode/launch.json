@@ -1,6 +1,17 @@
 {
     "configurations": [
         {
+            "name": "gen_inv_img",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "--img-size","128"
+            ]
+        },
+        {
             "name": "Train-args",
             "type": "python",
             "request": "launch",
@@ -8,18 +19,19 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": [
-                "--size","256",  //默认是256,最少是256
+                "--size","256", //默认是256,最少是256
                 "--channel_multiplier","1",
                 "--narrow","0.5",
                 "--ckpt","_myckpt",
                 "--sample","_mysample",
-                "--batch","1",  //默认是4
-                "--path","_mydataset",
+                "--batch","4", //默认是4,batch-size
+                "--img-path","_mydataset",
+                "--invimg-path","_mycode/celeba_invimg",
                 "--save_freq","10",
-                "--pretrain","./weights/GPEN-BFR-256.pth",
-                "--iter","201"
-
-
+                "--pretrainG","./_myweight/GPEN-BFR-256-G.pth",
+                "--pretrainD","./_myweight/GPEN-BFR-256-D.pth",
+                "--iter","201",
+                "--val_dir","_my_val_dir"
             ]
         },
         {
@@ -39,7 +51,8 @@
                 "--sr_scale","4",
                 "--save_face",
                 "--indir","examples/imgs",
-                "--outdir","examples/myoutput"
+                "--outdir","examples/myoutput",
+                // "--aligned"
             ]
         }
     ]

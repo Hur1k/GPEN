@@ -1,0 +1,18 @@
+{
+    "configurations": [
+        {
+            "name": "gen_inv_img",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "--img-size","64",
+                "--test-batch-size","64"
+            ],
+            "cwd": "${fileDirname}"
+        },
+        
+    ]
+}

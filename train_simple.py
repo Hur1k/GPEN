@@ -129,7 +129,7 @@ def g_path_regularize(fake_img, latents, mean_path_length, decay=0.01):
 
 def validation(model, lpips_func, args, device):
     lq_files = sorted(glob.glob(os.path.join(args.val_dir, 'lq', '*.*')))
-    hq_files = sorted(glob.glob(os.path.join(args.val_dir, 'hq', '*.*')))
+    hq_files = list(map(lambda x:os.path.join(args.val_dir,'hq',os.path.split(x)[1]),lq_files))
 
     assert len(lq_files) == len(hq_files)
 
@@ -178,7 +178,8 @@ def train(args, loader, generator, discriminator, losses, g_optim, d_optim, g_em
         g_module = generator
         d_module = discriminator
  
-    accum = 0.5 ** (32 / (10 * 1000))
+    # accum = 0.5 ** (32 / (10 * 1000))
+    accum = 0
 
     for idx in pbar:
         i = idx + args.start_iter
@@ -267,7 +268,7 @@ def train(args, loader, generator, discriminator, losses, g_optim, d_optim, g_em
         loss_dict['path'] = path_loss
         loss_dict['path_length'] = path_lengths.mean()
 
-        accumulate(g_ema, g_module, accum) # REVIEW 作用是保持gan稳定,g_ema被微调
+        accumulate(g_ema, g_module, accum) # REVIEW 作用是保持gan稳定,g_ema被微调,g参与训练
 
         loss_reduced = reduce_loss_dict(loss_dict)
 
@@ -298,15 +299,17 @@ def train(args, loader, generator, discriminator, losses, g_optim, d_optim, g_em
                         normalize=True,
                         range=(-1, 1),
                     )
-                    utils.save_image(
-                        degraded_img,
-                        f'tmp.png',
-                        nrow=args.batch,
-                        normalize=True,
-                        range=(-1, 1),
-                    )
+                    # utils.save_image(
+                    #     degraded_img,
+                    #     f'degraded-test.png',
+                    #     nrow=args.batch,
+                    #     normalize=True,
+                    #     range=(-1, 1),
+                    # )
+                    
 
-                lpips_value = validation(g_ema, lpips_func, args, device)
+                lpips_value = validation(g_ema, lpips_func, args, device) # REVIEW 暂时未处理，lpips不可信
+                # lpips_value = validation(g_ema, lpips_func, args, device)
                 print(f'{i}/{args.iter}: lpips: {lpips_value.cpu().numpy()[0][0][0][0]}')
 
             if i and i % (args.save_freq*10) == 0: #保存模型参数
@@ -326,7 +329,8 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--path', type=str, required=True)
+    parser.add_argument('--img-path', type=str, required=True)
+    parser.add_argument('--invimg-path', type=str, required=True)
     parser.add_argument('--base_dir', type=str, default='./')
     parser.add_argument('--iter', type=int, default=4000000)
     parser.add_argument('--batch', type=int, default=4)
@@ -342,7 +346,8 @@ if __name__ == '__main__':
     parser.add_argument('--lr', type=float, default=0.002)
     parser.add_argument('--local_rank', type=int, default=0)
     parser.add_argument('--ckpt', type=str, default='ckpts') #模型参数保存在这，会创建文件夹，pretrain的参数也要放这里
-    parser.add_argument('--pretrain', type=str, default=None)
+    parser.add_argument('--pretrainG', type=str, default=None)
+    parser.add_argument('--pretrainD', type=str, default=None)
     parser.add_argument('--sample', type=str, default='sample') #训练阶段用于输出样例以观察，这里需要输入一个路径，将会创建对应的文件夹
     parser.add_argument('--val_dir', type=str, default='val') #测试阶段用，获取hq和lq的照片，需要输入文件夹路径
     parser.add_argument('--use_cuda', action='store_true', help='use cuda or not')
@@ -394,24 +399,26 @@ if __name__ == '__main__':
         lr=args.lr * d_reg_ratio,
         betas=(0 ** d_reg_ratio, 0.99 ** d_reg_ratio),
     )
+
+    # if args.pretrain is  None:
+    #     print('load model:', args.pretrain)
+    #     ckpt = torch.load(args.pretrain,map_location=device)
+    #     generator.load_state_dict(ckpt['g'])
+    #     discriminator.load_state_dict(ckpt['d'])
+    #     g_ema.load_state_dict(ckpt['g_ema'])
+    #     g_optim.load_state_dict(ckpt['g_optim'])
+    #     d_optim.load_state_dict(ckpt['d_optim'])
     
-    g_weight = torch.load('./_myweight/GPEN-BFR-256-G.pth',map_location=device)
-    d_weight = torch.load('./_myweight/GPEN-BFR-256-D.pth',map_location=device)
-    generator.load_state_dict(g_weight)
-    g_ema.load_state_dict(g_weight)
-    discriminator.load_state_dict(d_weight)
-
-    if args.pretrain is  None:
-        print('load model:', args.pretrain)
+    if args.pretrainG is not None:
+        print('load model-G:', args.pretrainG)
+        ckpt = torch.load(args.pretrainG,map_location=device)
+        generator.load_state_dict(ckpt)
+        g_ema.load_state_dict(ckpt)
         
-        ckpt = torch.load(args.pretrain,map_location=device)
-
-        generator.load_state_dict(ckpt['g'])
-        discriminator.load_state_dict(ckpt['d'])
-        g_ema.load_state_dict(ckpt['g_ema'])
-            
-        g_optim.load_state_dict(ckpt['g_optim'])
-        d_optim.load_state_dict(ckpt['d_optim'])
+    if args.pretrainD is not None:
+        print('load model-D:', args.pretrainD)
+        ckpt = torch.load(args.pretrainD,map_location=device)
+        discriminator.load_state_dict(ckpt)
     
     smooth_l1_loss = torch.nn.SmoothL1Loss().to(device) #平滑的L1损失
     id_loss = IDLoss(args.base_dir, device, ckpt_dict=None) # 实现一个人脸识别的训练损失函数-bygpt
@@ -439,7 +446,7 @@ if __name__ == '__main__':
             broadcast_buffers=False,
         )
 
-    dataset = FaceDataset(args.path, args.size) #生成数据集，模糊的和清晰的
+    dataset = FaceDataset(args.img_path,args.invimg_path,args.size) #生成数据集，反演图像1和原始图像
     loader = data.DataLoader(
         dataset,
         batch_size=args.batch,
