@@ -74,21 +74,26 @@ class GFPGAN_degradation(object):
         return img_gt, img_lq
 
 class FaceDataset(Dataset):
-    def __init__(self, path, resolution=512):
+    def __init__(self, img_path,invimg_path, resolution=512):
         self.resolution = resolution
+        self.LQ_imgs = glob.glob(os.path.join(invimg_path, '*.*'))
+        self.HQ_imgs = list(map(lambda x:os.path.join(img_path,os.path.split(x)[-1][:-4]+'.jpg'),self.LQ_imgs))
+        self.length = len(self.LQ_imgs)
 
-        self.HQ_imgs = glob.glob(os.path.join(path, '*.*')) #找到所有文件，拼接路径
-        self.length = len(self.HQ_imgs)
-
-        self.degrader = GFPGAN_degradation() #降低dpi用，即生成模糊照片
-
+        # self.degrader = GFPGAN_degradation() #降低dpi用，即生成模糊照片
+        
     def __len__(self):
         return self.length
 
     def __getitem__(self, index):
-        img_gt = cv2.imread(self.HQ_imgs[index], cv2.IMREAD_COLOR) #.IMREAD_COLOR 彩图
+        img_gt = cv2.imread(self.HQ_imgs[index], cv2.IMREAD_GRAYSCALE) #.IMREAD_COLOR 彩图
+        img_gt = np.tile(img_gt[:, :, None], [1, 1, 3]) # 灰三
         img_gt = img_gt[70:70+108,35:35+108] #裁剪celeba数据集
         img_gt = cv2.resize(img_gt, (self.resolution, self.resolution), interpolation=cv2.INTER_AREA)
+        
+        img_lq = cv2.imread(self.LQ_imgs[index], cv2.IMREAD_COLOR)
+        img_lq = cv2.resize(img_lq, (self.resolution, self.resolution), interpolation=cv2.INTER_AREA)
+        pass
         
         # BFR degradation
         # We adopt the degradation of GFPGAN for simplicity, which however differs from our implementation in the paper.
@@ -96,11 +101,9 @@ class FaceDataset(Dataset):
         # Data degradation plays a key role in BFR. Please replace it with your own methods.
             #数据退化在BFR中起着关键作用。请用你自己的方法替换。
         img_gt = img_gt.astype(np.float32)/255.
-        img_gt, img_lq = self.degrader.degrade_process(img_gt)
-        
-        # # 转单通道
-        # img_gt = cv2.cvtColor(img_gt, cv2.COLOR_BGR2GRAY)
-        # img_lq = cv2.cvtColor(img_lq, cv2.COLOR_BGR2GRAY)
+        img_lq = img_lq.astype(np.float32)/255.
+        # img_gt, img_lq = self.degrader.degrade_process(img_gt)0
+
 
         img_gt =  ((torch.from_numpy(img_gt) - 0.5) / 0.5)#.view(self.resolution,self.resolution,1)
         img_lq =  ((torch.from_numpy(img_lq) - 0.5) / 0.5)#.view(self.resolution,self.resolution,1)
