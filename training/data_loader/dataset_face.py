@@ -74,12 +74,22 @@ class GFPGAN_degradation(object):
         return img_gt, img_lq
 
 class FaceDataset(Dataset):
-    def __init__(self, img_path,invimg_path, resolution=512):
+    def __init__(self, img_path,invimg_path, resolution=512,isValidate=False):
         self.resolution = resolution
+        
         self.LQ_imgs = glob.glob(os.path.join(invimg_path, '*.*'))
         self.HQ_imgs = list(map(lambda x:os.path.join(img_path,os.path.split(x)[-1][:-4]+'.jpg'),self.LQ_imgs))
         self.length = len(self.LQ_imgs)
 
+        if isValidate==False:
+            self.length = int(len(self.LQ_imgs)*0.8)
+            self.LQ_imgs = self.LQ_imgs[:self.length]
+            self.HQ_imgs = self.HQ_imgs[:self.length]
+        else:
+            self.length -= int(len(self.LQ_imgs)*0.8)
+            self.LQ_imgs = self.LQ_imgs[self.length:]
+            self.HQ_imgs = self.HQ_imgs[self.length:]
+            
         # self.degrader = GFPGAN_degradation() #降低dpi用，即生成模糊照片
         
     def __len__(self):

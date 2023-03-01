@@ -30,6 +30,7 @@ import random
 import os
 import cv2
 import glob
+import copy
 from tqdm import tqdm
 
 import torch
@@ -127,14 +128,19 @@ def g_path_regularize(fake_img, latents, mean_path_length, decay=0.01):
 
     return path_penalty, path_mean.detach(), path_lengths
 
-def validation(model, lpips_func, args, device):
+def test(model, lpips_func, args, device,i):
     lq_files = sorted(glob.glob(os.path.join(args.val_dir, 'lq', '*.*')))
     hq_files = list(map(lambda x:os.path.join(args.val_dir,'hq',os.path.split(x)[1]),lq_files))
-
     assert len(lq_files) == len(hq_files)
-
+    
+    imgs_t = None
+    imgs_out = None
+    imgs_hq = None
+    counter = 0
     dist_sum = 0
     model.eval()
+    save_path = os.path.join(args.val_dir,'test-output')
+    
     for lq_f, hq_f in zip(lq_files, hq_files):
         img_lq = cv2.imread(lq_f, cv2.IMREAD_COLOR)
         img_t = torch.from_numpy(img_lq).to(device).permute(2, 0, 1).unsqueeze(0)
@@ -148,12 +154,51 @@ def validation(model, lpips_func, args, device):
             img_hq = lpips.im2tensor(lpips.load_image(hq_f)).to(device)
             img_hq = F.interpolate(img_hq, (args.size, args.size))
             dist_sum += lpips_func.forward(img_out, img_hq)
+            
+        if args.test_num>counter:
+            if counter==0:
+                imgs_t = copy.deepcopy(img_t)
+                imgs_out = copy.deepcopy(img_out)
+                imgs_hq = copy.deepcopy(img_hq)
+            else:
+                imgs_t = torch.cat((imgs_t,img_t))
+                imgs_out = torch.cat((imgs_out,img_out))
+                imgs_hq = torch.cat((imgs_hq,img_hq))
+            pass
+        
+        counter+=1
+            
+    sample = torch.cat((imgs_t, imgs_out, imgs_hq), 0)
+    utils.save_image(
+                    sample,
+                    f'{save_path}/{str(i).zfill(6)}.png',
+                    nrow=args.test_num,
+                    normalize=True,
+                    range=(-1, 1),)
     
     return dist_sum.data/len(lq_files)
 
+def validation(model, lpips_func, args, device, vali_loader):
+    dist_sum = 0
+    model.eval()
+    length = 0
+    
+    for lq_f, hq_f in vali_loader:
+        length += lq_f.shape[0]
+        
+        with torch.no_grad():
+            img_out, __ = model(lq_f)
+            dist_sum += lpips_func.forward(img_out, hq_f).sum()
+            
+        if args.vali_num<=length:
+            break
+    
+    return dist_sum.data/length
 
-def train(args, loader, generator, discriminator, losses, g_optim, d_optim, g_ema, lpips_func, device):
-    loader = sample_data(loader)
+
+def train(args, train_loader, vali_loader, generator, discriminator, losses, g_optim, d_optim, g_ema, lpips_func, device):
+    train_loader = sample_data(train_loader)
+    vali_loader = sample_data(vali_loader)
 
     pbar = range(0, args.iter)
 
@@ -189,7 +234,7 @@ def train(args, loader, generator, discriminator, losses, g_optim, d_optim, g_em
 
             break
 
-        degraded_img, real_img = next(loader)
+        degraded_img, real_img = next(train_loader)
         degraded_img = degraded_img.to(device)
         real_img = real_img.to(device)
 
@@ -308,9 +353,10 @@ def train(args, loader, generator, discriminator, losses, g_optim, d_optim, g_em
                     # )
                     
  
-                lpips_value = validation(g_ema, lpips_func, args, device) # REVIEW 暂时未处理，lpips不可信
-                # lpips_value = validation(g_ema, lpips_func, args, device)
-                print(f'{i}/{args.iter}: lpips: {lpips_value.cpu().numpy()[0][0][0][0]}')
+                lpips_vali_value = validation(g_ema, lpips_func, args, device,vali_loader)
+                lpips_test_value = test(g_ema, lpips_func, args, device,i)
+                print(f'{i}/{args.iter}: lpips_vali: {lpips_vali_value.cpu().numpy():2f}')
+                print(f'{i}/{args.iter}: lpips_test: {lpips_test_value.cpu().numpy()[0][0][0][0]:2f}')
 
             if i and i % (args.save_freq*10) == 0: #保存模型参数
                 torch.save(
@@ -351,6 +397,9 @@ if __name__ == '__main__':
     parser.add_argument('--sample', type=str, default='sample') #训练阶段用于输出样例以观察，这里需要输入一个路径，将会创建对应的文件夹
     parser.add_argument('--val_dir', type=str, default='val') #测试阶段用，获取hq和lq的照片，需要输入文件夹路径
     parser.add_argument('--use_cuda', action='store_true', help='use cuda or not')
+    
+    parser.add_argument('--vali_num', type=int, default=4, help="验证集的数量")
+    parser.add_argument('--test_num', type=int, default=4, help="测试集的数量")
     
 
     args = parser.parse_args()
@@ -446,13 +495,20 @@ if __name__ == '__main__':
             broadcast_buffers=False,
         )
 
-    dataset = FaceDataset(args.img_path,args.invimg_path,args.size) #生成数据集，反演图像1和原始图像
-    loader = data.DataLoader(
-        dataset,
+    train_dataset = FaceDataset(args.img_path,args.invimg_path,args.size,False) #生成train数据集，反演图像1和原始图像
+    vali_dataset = FaceDataset(args.img_path,args.invimg_path,args.size,True) #生成validate数据集，反演图像1和原始图像
+    train_loader = data.DataLoader(
+        train_dataset,
         batch_size=args.batch,
-        sampler=data_sampler(dataset, shuffle=True, distributed=args.distributed),
+        sampler=data_sampler(train_dataset, shuffle=True, distributed=args.distributed),
+        drop_last=True,
+    )
+    vali_loader = data.DataLoader(
+        vali_dataset,
+        batch_size=args.batch,
+        sampler=data_sampler(vali_dataset, shuffle=True, distributed=args.distributed),
         drop_last=True,
     )
 
-    train(args, loader, generator, discriminator, [smooth_l1_loss, id_loss], g_optim, d_optim, g_ema, lpips_func, device)
+    train(args, train_loader,vali_loader,generator, discriminator, [smooth_l1_loss, id_loss], g_optim, d_optim, g_ema, lpips_func, device)
    

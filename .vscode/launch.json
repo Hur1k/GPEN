@@ -24,14 +24,17 @@
                 "--narrow","0.5",
                 "--ckpt","_myckpt",
                 "--sample","_mysample",
-                "--batch","4", //默认是4,batch-size
+                "--batch","2", //默认是4,batch-size
                 "--img-path","_mydataset",
                 "--invimg-path","_mycode/celeba_invimg",
                 "--save_freq","10",
                 "--pretrainG","./_myweight/GPEN-BFR-256-G.pth",
                 "--pretrainD","./_myweight/GPEN-BFR-256-D.pth",
-                "--iter","201",
-                "--val_dir","_my_val_dir"
+                "--iter","101",
+                "--val_dir","_my_val_dir",
+                "--vali_num","10",
+                "--test_num","10"
+
             ]
         },
         {
